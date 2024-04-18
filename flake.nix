@@ -10,13 +10,25 @@
       let
         defaultPkgs = import default_nixpkgs { inherit system; config.allowBroken = true; };
         nodePkgs = import node_nixpkgs { inherit system; };
+        frontend = nodePkgs.callPackage ./govtool/frontend { pkgs = nodePkgs; };
       in
       {
         packages.scripts = defaultPkgs.callPackage ./scripts/govtool { pkgs = defaultPkgs; };
         packages.infra = defaultPkgs.callPackage ./infra/terraform { pkgs = defaultPkgs; };
         packages.backend = defaultPkgs.callPackage ./govtool/backend { pkgs = defaultPkgs; };
-        packages.frontend = nodePkgs.callPackage ./govtool/frontend { pkgs = nodePkgs; };
+        packages.frontend = frontend.staticSite;
+        packages.frontendOverride = frontend.staticSite.overrideAttrs (finalAttrs: prevAttrs: {
+          VITE_BASE_URL = "https://optina.lan.disasm.us:8444";
+        });
+        packages.frontendModules = frontend.nodeModules;
 
-        devShell = defaultPkgs.mkShell { buildInputs = [ defaultPkgs.pre-commit ]; };
+        devShells = {
+          default = defaultPkgs.mkShell { buildInputs = with nodePkgs; [ defaultPkgs.pre-commit nodejs_18 yarn ]; };
+          frontend = frontend.devShell;
+          # shell with js dependencies only if yarn.lock is broken and needs fixed
+          js = defaultPkgs.mkShell {
+            buildInputs = [ nodePkgs.nodejs_18 nodePkgs.yarn ];
+          };
+        };
       });
 }
