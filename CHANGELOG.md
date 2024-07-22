@@ -12,6 +12,20 @@ changes.
 
 ### Added
 
+-
+
+### Fixed
+
+-
+
+### Changed
+
+-
+
+## [sancho-v1.0.10](https://github.com/IntersectMBO/govtool/releases/tag/sancho-v1.0.10) 2024-07-22
+
+### Added
+
 - Add PDF_API_URL to the frontend config [Issue 1575](https://github.com/IntersectMBO/govtool/issues/1575)
 
 ### Fixed
