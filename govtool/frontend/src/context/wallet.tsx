@@ -52,6 +52,17 @@ import {
   PoolVotingThresholds,
   ProtocolVersion,
   HardForkInitiationAction,
+  PlutusWitness,
+  PlutusScriptSource,
+  PlutusData,
+  Redeemer,
+  RedeemerTag,
+  CostModel,
+  Int,
+  Language,
+  PlutusScripts,
+  Redeemers,
+  TransactionWitnessSets,
 } from "@emurgo/cardano-serialization-lib-asmjs";
 import { Buffer } from "buffer";
 import { useNavigate } from "react-router-dom";
@@ -239,6 +250,7 @@ CardanoContext.displayName = "CardanoContext";
 
 const CardanoProvider = (props: Props) => {
   const [isEnabled, setIsEnabled] = useState(false);
+  const [isGuardrailScriptUsed, setIsGuardrailScriptUsed] = useState(false);
   const [isEnableLoading, setIsEnableLoading] = useState<string | null>(null);
   const [walletApi, setWalletApi] = useState<CardanoApiWallet | undefined>(
     undefined,
@@ -468,25 +480,40 @@ const CardanoProvider = (props: Props) => {
       PROTOCOL_PARAMS_KEY,
     ) as Protocol;
 
+    const exUnitPrices = ExUnitPrices.new(
+      UnitInterval.new(
+        BigNum.from_str(String(protocolParams.price_mem)),
+        BigNum.from_str(String("10000")),
+      ),
+      UnitInterval.new(
+        BigNum.from_str(String(protocolParams.price_step)),
+        BigNum.from_str(String("10000000")),
+      ),
+    );
+
     if (protocolParams) {
-      const txBuilder = TransactionBuilder.new(
-        TransactionBuilderConfigBuilder.new()
-          .fee_algo(
-            LinearFee.new(
-              BigNum.from_str(String(protocolParams.min_fee_a)),
-              BigNum.from_str(String(protocolParams.min_fee_b)),
-            ),
-          )
-          .pool_deposit(BigNum.from_str(String(protocolParams.pool_deposit)))
-          .key_deposit(BigNum.from_str(String(protocolParams.key_deposit)))
-          .coins_per_utxo_byte(
-            BigNum.from_str(String(protocolParams.coins_per_utxo_size)),
-          )
-          .max_value_size(protocolParams.max_val_size)
-          .max_tx_size(protocolParams.max_tx_size)
-          .prefer_pure_change(true)
-          .build(),
-      );
+      const txConfigBuilder = TransactionBuilderConfigBuilder.new()
+        .fee_algo(
+          LinearFee.new(
+            BigNum.from_str(String(protocolParams.min_fee_a)),
+            BigNum.from_str(String(protocolParams.min_fee_b)),
+          ),
+        )
+        .pool_deposit(BigNum.from_str(String(protocolParams.pool_deposit)))
+        .key_deposit(BigNum.from_str(String(protocolParams.key_deposit)))
+        .coins_per_utxo_byte(
+          BigNum.from_str(String(protocolParams.coins_per_utxo_size)),
+        )
+        .max_value_size(protocolParams.max_val_size)
+        .max_tx_size(protocolParams.max_tx_size)
+        .prefer_pure_change(true);
+
+      if (isGuardrailScriptUsed) {
+        txConfigBuilder.ex_unit_prices(exUnitPrices);
+      }
+
+      const txBuilder = TransactionBuilder.new(txConfigBuilder.build());
+
       return txBuilder;
     }
   }, []);
@@ -516,6 +543,7 @@ const CardanoProvider = (props: Props) => {
 
       try {
         const txBuilder = await initTransactionBuilder();
+        const transactionWitnessSet = TransactionWitnessSet.new();
 
         if (!txBuilder) {
           throw new Error(t("errors.appCannotCreateTransaction"));
@@ -537,6 +565,20 @@ const CardanoProvider = (props: Props) => {
 
         if (govActionBuilder) {
           txBuilder.set_voting_proposal_builder(govActionBuilder);
+        }
+
+        if (isGuardrailScriptUsed) {
+          try {
+            const scripts = PlutusScripts.new();
+            scripts.add(
+              PlutusScript.from_bytes_v3(Buffer.from(GUARDRAIL_SCRIPT, "hex")),
+            );
+            transactionWitnessSet.set_plutus_scripts(scripts);
+
+            setIsGuardrailScriptUsed(false);
+          } catch (e) {
+            console.error(e);
+          }
         }
 
         if (
@@ -600,7 +642,6 @@ const CardanoProvider = (props: Props) => {
         const txBody = txBuilder.build();
 
         // Make a full transaction, passing in empty witness set
-        const transactionWitnessSet = TransactionWitnessSet.new();
         const tx = Transaction.new(
           txBody,
           TransactionWitnessSet.from_bytes(transactionWitnessSet.to_bytes()),
@@ -921,6 +962,8 @@ const CardanoProvider = (props: Props) => {
         );
         govActionBuilder.add(votingProposal);
 
+        setIsGuardrailScriptUsed(true);
+
         return govActionBuilder;
       } catch (err) {
         console.error(err);
@@ -989,6 +1032,8 @@ const CardanoProvider = (props: Props) => {
           BigNum.from_str(epochParams?.gov_action_deposit.toString()),
         );
         govActionBuilder.add(votingProposal);
+
+        setIsGuardrailScriptUsed(true);
 
         return govActionBuilder;
       } catch (err) {
