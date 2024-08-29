@@ -25,4 +25,5 @@
         USERSNAP_SPACE_API_KEY: "{{ lookup('env','USERSNAP_SPACE_API_KEY') }}"
         SENTRY_DSN_FRONTEND: "{{ lookup ('env', 'SENTRY_DSN_FRONTEND') }}"
         SENTRY_DSN_BACKEND: "{{ lookup ('env', 'SENTRY_DSN_BACKEND') }}"
+        PDF_API_URL: "{{ lookup('env', 'PDF_API_URL') }}"
       become: yes
